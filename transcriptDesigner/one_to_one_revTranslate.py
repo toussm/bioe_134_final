@@ -1,7 +1,9 @@
 import csv
+import os
 
 def amino_acid_to_codon(file_path):
     codon_dict = {}
+    file_path = os.path.join(os.path.dirname(__file__), "yeast_codon_usage_table.tsv")
 
     # Open and read the TSV file
     with open(file_path, 'r') as file:
@@ -25,5 +27,5 @@ def amino_acid_to_codon(file_path):
     return amino_acid_to_codon
 
 # Example usage:
-file_path = "yeast_codon_usage_table.tsv"  # Replace with your file path
+file_path = "transcriptDesigner/yeast_codon_usage_table.tsv"  # Replace with your file path
 result = amino_acid_to_codon(file_path)

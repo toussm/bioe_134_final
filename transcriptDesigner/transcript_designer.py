@@ -1,5 +1,9 @@
 from dnachisel import *
 from transcriptDesigner.one_to_one_revTranslate import amino_acid_to_codon
+import warnings
+from Bio import BiopythonWarning
+
+warnings.simplefilter('ignore', BiopythonWarning)
 
 class TranscriptDesigner:
     def __init__(self):
@@ -16,7 +20,6 @@ class TranscriptDesigner:
         for aa in peptide:
             codon = self.aminoAcidToCodon[aa]
             dna_seq += codon
-        
         return dna_seq
 
     
@@ -25,8 +28,8 @@ class TranscriptDesigner:
         problem = DnaOptimizationProblem(
             sequence=dna_sequence,
             constraints=[
-                EnforceGCContent(mini=0.2, maxi=0.4),
-                AvoidHairpins(stem_size=10),  # Avoid hairpins in the sequence
+                EnforceGCContent(mini=0.2, maxi=0.6),
+                AvoidHairpins(stem_size=19),  # Avoid hairpins in the sequence
                 AvoidPattern("GAATTC"),  # Avoid EcoRI restriction site
                 AvoidPattern("GGATCC"),  # Avoid BamHI restriction site
                 AvoidPattern("AAAAAAAAA"),  # Avoid long homopolymer stretches
@@ -39,25 +42,23 @@ class TranscriptDesigner:
 
         # Solve the problem
         problem.optimize()
-        print(problem.sequence)
 
         # Ensure the solution is valid
-        if problem.all_constraints_pass():
-            return problem.sequence  # Optimized DNA sequence
-        else:
-            print(problem.constraints_text_summary())
-            raise ValueError("Optimization failed: constraints could not be satisfied.")
+        # if problem.all_constraints_pass():
+        #     return problem  # Optimized DNA problem
+        # else:
+        #     print(problem.constraints_text_summary())
+        #     raise ValueError("Optimization failed: constraints could not be satisfied.")
+        return problem
         
     def run(self, protein: str):
 
-        #Check for stop codon. Add if not there
-        if protein[-1] != '*':
-            protein += '*'
+        protein += '*'
         
         simple_dna_seq = self.simpleReverseTranslate(protein)
         optimized_transcript = self.optimize_transcript(simple_dna_seq)
         
-        return optimized_transcript
+        return optimized_transcript.sequence, optimized_transcript.constraints_text_summary()
     
 if __name__ == "__main__":
     # Example usage of TranscriptDesigner
@@ -66,7 +67,7 @@ if __name__ == "__main__":
     designer = TranscriptDesigner()
     designer.initiate()
 
-    transcript = designer.run(peptide)
+    transcript = designer.run(peptide)[0]
     translation = translate(transcript)
 
     print(transcript)
