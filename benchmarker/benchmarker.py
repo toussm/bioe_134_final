@@ -58,12 +58,15 @@ def benchmark_proteome(fasta_file):
                 'transcript': transcript[0],
                 'summary' : transcript[1]
             })
+            if i == 9:
+                break
         except Exception as e:
             error_results.append({
                 'gene': gene,
                 'protein': protein,
                 'error': f"Error: {str(e)}\nTraceback: {traceback.format_exc()}"
             })
+        i+=1
     return successful_results, error_results
 
 def analyze_errors(error_results):
@@ -81,33 +84,49 @@ def analyze_errors(error_results):
 
 def parse_constraints_summary(summary, gene, protein, transcript_dna, validation_failures):
 
-    # Check for failed constraints
-    failed_constraints = re.findall(r'FAIL ┍ (.*?)\n\s+│ (.*?)Locations: (.*?)\n', summary, re.DOTALL)
-    for constraint, score, locations in failed_constraints:
-        if "AvoidHairpins" in constraint:
-            formatted_hairpin = locations.replace('\n', ' ').replace('"', "'")
-            validation_failures.append({
-                'gene': gene,
-                'protein': protein,
-                'cds': transcript_dna,
-                'site': f"Hairpin detected: {formatted_hairpin}"
-            })
-        elif "AvoidPattern" in constraint:
-            pattern = re.search(r'pattern:(\S+)', constraint).group(1)
-            validation_failures.append({
-                'gene': gene,
-                'protein': protein,
-                'cds': transcript_dna,
-                'site': f"Pattern detected: {pattern} at {locations.strip()}"
-            })
-        elif "EnforceGCContent" in constraint:
-            gc_bounds = re.search(r'mini:(\S+), maxi:(\S+)', constraint)
-            validation_failures.append({
-                'gene': gene,
-                'protein': protein,
-                'cds': transcript_dna,
-                'site': f"GC Content out of bounds: {gc_bounds.group(1)}-{gc_bounds.group(2)}"
-            })
+    # Check for failed AvoidPattern constraints
+    avoid_pattern_failures = re.findall(
+        r'FAIL ┍ AvoidPattern\[.*?\]\(pattern:(\S+)\).*?Pattern found at positions (.*?)\n',
+        summary,
+        re.DOTALL
+    )
+
+    for pattern, locations in avoid_pattern_failures:
+        formatted_locations = locations.replace('\n', ' ').replace('"', "'").strip()
+        validation_failures.append({
+            'gene': gene,
+            'protein': protein,
+            'cds': transcript_dna,
+            'site': f"Pattern detected: {pattern} at {formatted_locations}"
+        })
+
+    # Check for failed AvoidHairpins constraints
+    failed_hairpins = re.findall(
+        r'FAIL ┍ AvoidHairpins\[.*?\].*?Locations: (.*?)\n', 
+        summary, 
+        re.DOTALL
+    )
+    for hairpin_locations in failed_hairpins:
+        formatted_hairpin = hairpin_locations.replace('\n', ' ').replace('"', "'").strip()
+        validation_failures.append({
+            'gene': gene,
+            'protein': protein,
+            'cds': transcript_dna,
+            'site': f"Hairpin detected: {formatted_hairpin}"
+        })
+
+    # Check for failed EnforceGCContent constraints
+    gc_content_failures = re.findall(
+        r'FAIL ┍ EnforceGCContent\[.*?\]\(mini:(\S+), maxi:(\S+)\)', 
+        summary
+    )
+    for mini, maxi in gc_content_failures:
+        validation_failures.append({
+            'gene': gene,
+            'protein': protein,
+            'cds': transcript_dna,
+            'site': f"GC Content out of bounds: {mini}-{maxi}"
+        })
 
     return validation_failures
 
@@ -142,7 +161,7 @@ def validate_transcripts(successful_results):
             })
             continue
 
-        # Validate against hairpins, forbidden sequences, and internal promoters
+        # Validate against hairpins, forbidden sequences, and codons
         #optmization_summary = parse_constraints_summary(validation_failures=validation_failures, summary=result['summary'], gene=result['gene'], protein=result['protein'], transcript_dna=result['transcript'])
         parse_constraints_summary(validation_failures=validation_failures, summary=result['summary'], gene=result['gene'], protein=result['protein'], transcript_dna=result['transcript'])
         #validation_failures.extend(optmization_summary)
@@ -167,6 +186,7 @@ def generate_summary(total_genes, parsing_time, execution_time, errors_summary, 
     # Categorize failures by checker type
     checker_failures = {
         'Forbidden Sequence Checker': 0,
+        'Rare Codons Checker': 0,
         'Hairpin Checker': 0,
         'Codon Usage Checker': 0,
         'GC Content Checker': 0,
