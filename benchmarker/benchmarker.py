@@ -58,8 +58,8 @@ def benchmark_proteome(fasta_file):
                 'transcript': transcript[0],
                 'summary' : transcript[1]
             })
-            if i == 9:
-                break
+            # if i == 99:
+            #     break
         except Exception as e:
             error_results.append({
                 'gene': gene,
@@ -84,6 +84,13 @@ def analyze_errors(error_results):
 
 def parse_constraints_summary(summary, gene, protein, transcript_dna, validation_failures):
 
+    constraint_aggregates = {
+        "Forbidden Patterns": [],
+        "Hairpins": [],
+        "GC Content": [],
+        "Rare Codons": []
+    }
+
     # Check for failed AvoidPattern constraints
     avoid_pattern_failures = re.findall(
         r'FAIL ┍ AvoidPattern\[.*?\]\(pattern:(\S+)\).*?Pattern found at positions (.*?)\n',
@@ -93,40 +100,47 @@ def parse_constraints_summary(summary, gene, protein, transcript_dna, validation
 
     for pattern, locations in avoid_pattern_failures:
         formatted_locations = locations.replace('\n', ' ').replace('"', "'").strip()
-        validation_failures.append({
-            'gene': gene,
-            'protein': protein,
-            'cds': transcript_dna,
-            'site': f"Pattern detected: {pattern} at {formatted_locations}"
-        })
+        constraint_aggregates["Forbidden Patterns"].append(f"{pattern} at {formatted_locations}")
+    
+    
+    avoid_rare_codons = re.findall(
+        r'FAIL ┍ AvoidRareCodons\[.*?\]\n.*?Pattern found at positions (.*?)\n',
+        summary,
+        re.DOTALL
+    )
+
+    for pattern, locations in avoid_rare_codons:
+        formatted_locations = locations.replace('\n', ' ').replace('"', "'").strip()
+        constraint_aggregates["Rare Codons"].append(f"{formatted_locations}")
 
     # Check for failed AvoidHairpins constraints
     failed_hairpins = re.findall(
-        r'FAIL ┍ AvoidHairpins\[.*?\].*?Locations: (.*?)\n', 
-        summary, 
+        r'FAIL ┍ AvoidHairpins\[.*?\].*?Locations: (.*?)\n',
+        summary,
         re.DOTALL
     )
     for hairpin_locations in failed_hairpins:
         formatted_hairpin = hairpin_locations.replace('\n', ' ').replace('"', "'").strip()
-        validation_failures.append({
-            'gene': gene,
-            'protein': protein,
-            'cds': transcript_dna,
-            'site': f"Hairpin detected: {formatted_hairpin}"
-        })
+        constraint_aggregates["Hairpins"].append(formatted_hairpin)
 
     # Check for failed EnforceGCContent constraints
     gc_content_failures = re.findall(
-        r'FAIL ┍ EnforceGCContent\[.*?\]\(mini:(\S+), maxi:(\S+)\)', 
+        r'FAIL ┍ EnforceGCContent\[.*?\]\(mini:(\S+), maxi:(\S+)\)',
         summary
     )
     for mini, maxi in gc_content_failures:
-        validation_failures.append({
-            'gene': gene,
-            'protein': protein,
-            'cds': transcript_dna,
-            'site': f"GC Content out of bounds: {mini}-{maxi}"
-        })
+        constraint_aggregates["GC Content"].append(f"Out of bounds: {mini}-{maxi}")
+
+    # Add aggregated failures to validation_failures
+    for constraint_type, failures in constraint_aggregates.items():
+        if failures:
+            aggregated_sites = "; ".join(failures)
+            validation_failures.append({
+                'gene': gene,
+                'protein': protein,
+                'cds': transcript_dna,
+                'site': f"{constraint_type} detected: {aggregated_sites}"
+            })
 
     return validation_failures
 
@@ -183,27 +197,26 @@ def generate_summary(total_genes, parsing_time, execution_time, errors_summary, 
     """
     total_validation_failures = len(validation_failures)
     
-    # Categorize failures by checker type
+   # Categorize failures by checker type
     checker_failures = {
         'Forbidden Sequence Checker': 0,
-        'Rare Codons Checker': 0,
         'Hairpin Checker': 0,
-        'Codon Usage Checker': 0,
         'GC Content Checker': 0,
+        'Rare Codons': 0,
         'Translation/Completeness Checker': 0
     }
 
     # Increment the appropriate checker category based on the failure site
     for failure in validation_failures:
         site = failure['site']
-        if "Pattern detected" in site:
+        if "Forbidden Patterns" in site:
             checker_failures['Forbidden Sequence Checker'] += 1
-        elif "Hairpin detected" in site:
+        elif "Hairpins" in site:
             checker_failures['Hairpin Checker'] += 1
-        elif "Codon usage check failed" in site:
-            checker_failures['Codon Usage Checker'] += 1
         elif "GC Content" in site:
             checker_failures['GC Content Checker'] += 1
+        elif "Rare Codons" in site:
+            checker_failures['Rare Codons'] += 1
         elif "Translation or completeness error" in site:
             checker_failures['Translation/Completeness Checker'] += 1
 

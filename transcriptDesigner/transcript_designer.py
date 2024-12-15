@@ -29,26 +29,28 @@ class TranscriptDesigner:
             sequence=dna_sequence,
             constraints=[
                 EnforceGCContent(mini=0.2, maxi=0.6),
-                AvoidHairpins(stem_size=19),  # Avoid hairpins in the sequence
+                AvoidHairpins(stem_size=10, hairpin_window=30),  # Avoid hairpins in the sequence
                 AvoidPattern("GAATTC"),  # Avoid EcoRI restriction site
                 AvoidPattern("GGATCC"),  # Avoid BamHI restriction site
                 AvoidPattern("AAAAAAAAA"),  # Avoid long homopolymer stretches
                 AvoidPattern("TATAAA"),  # Avoid TATA box
+                AvoidPattern("AAGCTT"),  # Avoid HindIII restriction site
+                AvoidPattern("GCGGCCGC"), # Avoid NotI restriction site
+                # AvoidPattern("GTAAGT"), # Avoid intron splice donor sites
+                # AvoidPattern("GTGAGT"), # Avoid intron splice donor sites
+                # AvoidPattern("CAG"), # Avoid intron splice acceptor sites
+                # AvoidPattern("TAG"), # Avoid inron splice acceptor sites
+                AvoidRareCodons(species="s_cerevisiae", min_frequency=0.2)
+
             ],
             objectives=[
-                CodonOptimize(species='s_cerevisiae'),  # Optimize for S. cerevisiae codon usage
+                CodonOptimize(species='s_cerevisiae')  # Optimize for S. cerevisiae codon usage
             ]
         )
 
         # Solve the problem
         problem.optimize()
-
-        # Ensure the solution is valid
-        # if problem.all_constraints_pass():
-        #     return problem  # Optimized DNA problem
-        # else:
-        #     print(problem.constraints_text_summary())
-        #     raise ValueError("Optimization failed: constraints could not be satisfied.")
+        # print(problem.constraints_text_summary())
         return problem
         
     def run(self, protein: str):
