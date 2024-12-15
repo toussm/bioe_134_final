@@ -23,7 +23,7 @@ class TranscriptDesigner:
         return dna_seq
 
     
-    def optimize_transcript(self, dna_sequence: str):
+    def optimize_transcript(self, dna_sequence: str, peptide: str):
         # Define the optimization problem
         problem = DnaOptimizationProblem(
             sequence=dna_sequence,
@@ -36,21 +36,32 @@ class TranscriptDesigner:
                 AvoidPattern("TATAAA"),  # Avoid TATA box
                 AvoidPattern("AAGCTT"),  # Avoid HindIII restriction site
                 AvoidPattern("GCGGCCGC"), # Avoid NotI restriction site
-                # AvoidPattern("GTAAGT"), # Avoid intron splice donor sites
-                # AvoidPattern("GTGAGT"), # Avoid intron splice donor sites
-                # AvoidPattern("CAG"), # Avoid intron splice acceptor sites
-                # AvoidPattern("TAG"), # Avoid inron splice acceptor sites
-                AvoidRareCodons(species="s_cerevisiae", min_frequency=0.2)
+                AvoidPattern("GTAAGT"), # Avoid intron splice sites
+                AvoidPattern("GTGAGT"), # Avoid intron splice sites
+                AvoidRareCodons(species="s_cerevisiae", min_frequency=0.2),
+                EnforceTranslation(translation=peptide)
 
             ],
             objectives=[
+                EnforceGCContent(mini=0.2, maxi=0.6),
+                AvoidPattern("GAATTC"),  # Avoid EcoRI restriction site
+                AvoidPattern("GGATCC"),  # Avoid BamHI restriction site
+                AvoidPattern("AAAAAAAAA"),  # Avoid long homopolymer stretches
+                AvoidPattern("TATAAA"),  # Avoid TATA box
+                AvoidPattern("AAGCTT"),  # Avoid HindIII restriction site
+                AvoidHairpins(stem_size=10, hairpin_window=30),  # Avoid hairpins in the sequence
+                AvoidPattern("GCGGCCGC"), # Avoid NotI restriction site
+                AvoidPattern("GTAAGT"), # Avoid intron splice sites
+                AvoidPattern("GTGAGT"), # Avoid intron splice sites
+                AvoidRareCodons(species="s_cerevisiae", min_frequency=0.2),
+                EnforceTranslation(translation=peptide),
                 CodonOptimize(species='s_cerevisiae')  # Optimize for S. cerevisiae codon usage
             ]
         )
 
         # Solve the problem
+        problem.resolve_constraints()
         problem.optimize()
-        # print(problem.constraints_text_summary())
         return problem
         
     def run(self, protein: str):
@@ -58,7 +69,7 @@ class TranscriptDesigner:
         protein += '*'
         
         simple_dna_seq = self.simpleReverseTranslate(protein)
-        optimized_transcript = self.optimize_transcript(simple_dna_seq)
+        optimized_transcript = self.optimize_transcript(simple_dna_seq, protein)
         
         return optimized_transcript.sequence, optimized_transcript.constraints_text_summary()
     

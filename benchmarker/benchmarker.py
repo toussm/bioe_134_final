@@ -58,7 +58,7 @@ def benchmark_proteome(fasta_file):
                 'transcript': transcript[0],
                 'summary' : transcript[1]
             })
-            # if i == 99:
+            # if i == 2:
             #     break
         except Exception as e:
             error_results.append({
@@ -66,6 +66,9 @@ def benchmark_proteome(fasta_file):
                 'protein': protein,
                 'error': f"Error: {str(e)}\nTraceback: {traceback.format_exc()}"
             })
+            if i == 2:
+                break
+
         i+=1
     return successful_results, error_results
 
@@ -97,7 +100,8 @@ def parse_constraints_summary(summary, gene, protein, transcript_dna, validation
         summary,
         re.DOTALL
     )
-
+    # if len(avoid_pattern_failures) > len(transcript_dna) // 300:
+    #     constraint_aggregates["Forbidden Patterns"].append("True")
     for pattern, locations in avoid_pattern_failures:
         formatted_locations = locations.replace('\n', ' ').replace('"', "'").strip()
         constraint_aggregates["Forbidden Patterns"].append(f"{pattern} at {formatted_locations}")
@@ -160,11 +164,22 @@ def validate_transcripts(successful_results):
             # Verify that the translated protein matches the original protein
             original_protein = result['protein']
             translated_protein = translate(cds[:-1])
+            mismatches = []
+            min_length = min(len(original_protein), len(translated_protein))
+
+            for i in range(min_length):
+                if original_protein[i] != translated_protein[i]:
+                    mismatches.append({
+                        'position': i + 1,  # Residue positions are 1-based
+                        'original': original_protein[i],
+                        'translated': translated_protein[i]
+                    })
+            # print(mismatches)
             if original_protein != translated_protein:
                 raise ValueError(f"Translation mismatch: Original {original_protein}, Translated {translated_protein}")
 
             # Ensure CDS starts with valid start codon and ends with stop codon
-            if not (cds.startswith(("ATG", "GTG", "TTG")) and cds.endswith(("TAA", "TGA", "TAG"))):
+            if not (cds.startswith(("ATG", "GTG", "TTG", "CTG")) and cds.endswith(("TAA", "TGA", "TAG"))):
                 raise ValueError("CDS does not start with a valid start codon or end with a valid stop codon.")
         except ValueError as e:
             validation_failures.append({
@@ -176,9 +191,7 @@ def validate_transcripts(successful_results):
             continue
 
         # Validate against hairpins, forbidden sequences, and codons
-        #optmization_summary = parse_constraints_summary(validation_failures=validation_failures, summary=result['summary'], gene=result['gene'], protein=result['protein'], transcript_dna=result['transcript'])
         parse_constraints_summary(validation_failures=validation_failures, summary=result['summary'], gene=result['gene'], protein=result['protein'], transcript_dna=result['transcript'])
-        #validation_failures.extend(optmization_summary)
     return validation_failures
 
 def write_validation_report(validation_failures):
